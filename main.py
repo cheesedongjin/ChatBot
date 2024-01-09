@@ -1,8 +1,8 @@
 import re
-from generate import generate, generate_full_sentence, save_model, load_model
+from generate import generate_full_sentence, save_model, load_model
 import Levenshtein
 from collections import OrderedDict
-from fullmode import extract_keywords
+from fullmode import main2
 
 
 def split_korean(text):
@@ -63,32 +63,18 @@ model = load_model('model.json')
 model2 = load_model('model2.json')
 
 while True:
-    mode = input("1. full mode\n2. word mode\n3. sentence mode\n4. learn\n: ")
+    mode = input("1. (대화)개발중\n2. 키워드-문장 생성\n3. 학습\n: ")
     if mode == '1':
         value = input("입력: ")
-        extract_keywords(value)
+        main2(value)
     elif mode == '2':
-        value = input("입력: ")
-        result1 = main(value)
-        if value == result1:
-            generate(result1)
-        else:
-            to_add = input("입력값이 올바른 단어입니까?(1234567890로 예): ")
-            if to_add == '1234567890':
-                contents += ',' + value
-                file2.write(contents)
-                print("\"" + value + "\"가 추가되었습니다.")
-                generate(value)
-            else:
-                break
-    elif mode == '3':
         while True:
             value = input("입력(0으로 나가기): ")
             if value == '0':
                 break
             result1 = main(value)
             generate_full_sentence(result1)
-    elif mode == '4':
+    elif mode == '3':
         with open('learn.txt', 'r', encoding='UTF8') as file3:
             value = file3.read()
 

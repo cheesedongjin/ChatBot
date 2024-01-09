@@ -1,32 +1,59 @@
-import torch
-from transformers import BertTokenizer, BertForTokenClassification
-from kss import split_sentences  # (선택적) 문장 분리를 위한 라이브러리
+from gensim.models import Word2Vec
+import re
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 
-def extract_keywords(sentence):
-    # (선택적) 문장 분리
-    sentences = split_sentences(sentence)
+def train_word2vec_model(word_list, vector_size=100, window=1, min_count=1, workers=4):
+    model = Word2Vec(word_list, vector_size=vector_size, window=window, min_count=min_count, workers=workers)
+    model.train(word_list, total_examples=len(word_list), epochs=10)
+    return model
 
-    # KoBERT 모델 및 토크나이저 로딩
-    model_name = "snunlp/kobert"
-    tokenizer = BertTokenizer.from_pretrained(model_name)
-    model = BertForTokenClassification.from_pretrained(model_name)
 
-    keywords = []
+def sentence_vector(sentence, model):
+    tokens = [token.strip() for token in re.split(r'\s|,', sentence) if token.strip()]
+    print("tokens: ", tokens)
+    # 단어 벡터 추출
+    word_vectors = [model.wv.get_vector(token) for token in tokens if token in model.wv]
+    print("word_vectors: ", word_vectors)
+    if word_vectors:
+        avg_vector = np.mean(word_vectors, axis=0)
+        return avg_vector
+    else:
+        return None
 
-    for sent in sentences:
-        # 문장을 토큰화하고 BERT 입력 형식으로 변환
-        tokens = tokenizer.encode(sent, return_tensors='pt')
 
-        # 모델로부터 예측값 받아오기
-        with torch.no_grad():
-            outputs = model(tokens)
+def most_similar_word_to_sentence(sentence, model):
+    input_vector = sentence_vector(sentence, model)
+    print("input_vector: ", input_vector)
+    if input_vector is not None:
+        similarities = cosine_similarity([input_vector], model.wv.vectors)
+        most_similar_index = np.argmax(similarities)
+        most_similar_word = model.wv.index_to_key[most_similar_index]
+        return most_similar_word
+    else:
+        return None
 
-        # 토큰의 예측 클래스 중 중요한 토큰 선택
-        predictions = torch.argmax(outputs.logits, dim=2)
-        selected_tokens = [tokenizer.decode(token.item()) for token in tokens[0][predictions[0] == 1]]
 
-        # 선택된 토큰을 키워드 리스트에 추가
-        keywords.extend(selected_tokens)
+def read_word_list(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+    # 각 줄을 쉼표로 구분된 단어 리스트로 변환
+    word_list = [word.strip() for line in lines for word in line.split(',')]
+    return word_list
 
-    return keywords
+
+def main2(user_input):
+    # 메모장 파일에서 단어 리스트 읽어오기
+    word_list = read_word_list('list.txt')
+
+    # Word2Vec 모델 훈련
+    model = train_word2vec_model(word_list)
+
+    # 가장 근사한 단어 찾기
+    result_word = most_similar_word_to_sentence(user_input, model)
+
+    if result_word is not None:
+        print(f"입력한 문장의 평균 벡터와 가장 유사한 단어: {result_word}")
+    else:
+        print("입력한 문장에 대한 벡터를 계산할 수 없습니다.")
