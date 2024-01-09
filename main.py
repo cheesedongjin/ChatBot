@@ -1,6 +1,8 @@
 import re
 from generate import generate, generate_full_sentence, save_model, load_model
 import Levenshtein
+from collections import OrderedDict
+from fullmode import extract_keywords
 
 
 def split_korean(text):
@@ -41,25 +43,6 @@ def find_similar_strings(input_texts, candidate_lists):
     return distances[0][0]
 
 
-def developer():
-    contentss = get_contents()
-    candidate_list = contentss.split(',')
-    while True:
-        # 테스트
-        input_text = input("입력(없는 단어로 나가기): ")
-
-        result = find_similar_strings(input_text, candidate_list)
-        print(f"입력값: {input_text}, 비슷한 문자열: {result}")
-        if input_text not in candidate_list:
-            to_addd = input("입력값이 올바른 단어입니까?(1234567890로 예, 0로 나가기): ")
-            if to_addd == '1234567890':
-                contentss += ',' + input_text
-                candidate_list.append(input_text)
-                print("\"" + input_text + "\"가 추가되었습니다.")
-            elif to_addd == '0':
-                break
-
-
 def main(input_text):
     contentsss = get_contents()
     candidate_list = contentsss.split(',')
@@ -67,7 +50,7 @@ def main(input_text):
     return result
 
 
-with open('list.txt', 'r') as file:
+with open('list.txt', 'r', encoding='UTF8') as file:
     contents = file.read()
 
 
@@ -75,13 +58,15 @@ def get_contents():
     return contents
 
 
-file2 = open('list.txt', 'w')
+file2 = open('list.txt', 'a', encoding='UTF8')
 model = load_model('model.json')
+model2 = load_model('model2.json')
 
 while True:
-    mode = input("1. developer mode\n2. word mode\n3. sentence mode\n4. learn\n")
+    mode = input("1. full mode\n2. word mode\n3. sentence mode\n4. learn\n: ")
     if mode == '1':
-        developer()
+        value = input("입력: ")
+        extract_keywords(value)
     elif mode == '2':
         value = input("입력: ")
         result1 = main(value)
@@ -97,38 +82,55 @@ while True:
             else:
                 break
     elif mode == '3':
-        value = input("입력: ")
-        result1 = main(value)
-        if value == result1:
-            generate_full_sentence(result1)
-        else:
-            to_add = input("입력값이 올바른 단어입니까?(1234567890로 예): ")
-            if to_add == '1234567890':
-                contents += ',' + value
-                file2.write(contents)
-                print("\"" + value + "\"가 추가되었습니다.")
-                generate_full_sentence(value)
-            else:
+        while True:
+            value = input("입력(0으로 나가기): ")
+            if value == '0':
                 break
+            result1 = main(value)
+            generate_full_sentence(result1)
     elif mode == '4':
         with open('learn.txt', 'r', encoding='UTF8') as file3:
             value = file3.read()
-        sentences = value.split(".")
+
+        pattern = re.compile(r'[(\[{<][^(\[{<>]*[)\]}>]')
+        value = value.replace("'", "").replace('"', '')
+        value = value.replace('\t', ' ')
+
+        while re.search(pattern, value):
+            value = re.sub(pattern, '', value)
+        sentences = re.split(r'\.(?!\d)', value)
         sentenceslist = []
         for i in sentences:
-            sentenceslist += re.split(r'[.,!?:;\'"()]+', i)
-        sentenceslist = list(filter(None, sentenceslist))
+            sentenceslist += re.split(r'[!?:;\'"(){}\[\]/|\\+=\-*\n]+', i)
+            sentenceslist += re.split(r'\.(?!\d)', i)
+        sentenceslist = list(OrderedDict.fromkeys(filter(None, sentenceslist)))
         for sentence in sentenceslist:
-            words = sentence.split(" ")
+            words = re.split(r'[,!?:;\'"(){}\[\]/|\\+=\-*\n\s]+', sentence)
+            words = list(OrderedDict.fromkeys(filter(None, words)))
             for i in range(len(words) - 1):
+                w = words[i]
+                words[i] = w.split(r'\n')
+                words[i] = list(OrderedDict.fromkeys(words[i]))
+                words[i] = ' '.join(words[i])
                 contents += ',' + words[i]
                 if words[i] not in model:
                     model[words[i]] = {}
                 if words[i + 1] not in model[words[i]]:
                     model[words[i]][words[i + 1]] = 0
                 model[words[i]][words[i + 1]] += 0.000001
+                print(words[i], words[i + 1], end=' ')
+            for i in range(len(words) - 1):
+                if words[1] not in model2:
+                    model2[words[1]] = {}
+                if words[i + 1] not in model2[words[1]]:
+                    model2[words[1]][words[i + 1]] = 0
+                model2[words[1]][words[i + 1]] += 0.000001
+            print()
         save_model('model.json', model)
-        print(sentenceslist)
+        save_model('model2.json', model2)
+        contents = contents.split(',')
+        contents = set(contents)
+        contents = ",".join(contents)
         file2.write(contents)
     else:
         file2.close()
